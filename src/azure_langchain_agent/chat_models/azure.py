@@ -1,7 +1,7 @@
 """Azure OpenAI chat model — minimal langchain-compatible implementation."""
 from __future__ import annotations
 
-from typing import Any, List, Optional
+from typing import Any, AsyncIterator, Iterator, List, Optional
 
 from langchain_core.callbacks import (
     AsyncCallbackManagerForLLMRun,
@@ -10,11 +10,12 @@ from langchain_core.callbacks import (
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import (
     AIMessage,
+    AIMessageChunk,
     BaseMessage,
     HumanMessage,
     SystemMessage,
 )
-from langchain_core.outputs import ChatGeneration, ChatResult
+from langchain_core.outputs import ChatGeneration, ChatGenerationChunk, ChatResult
 from openai import AsyncAzureOpenAI, AzureOpenAI
 
 _ROLE_MAP = {
@@ -39,6 +40,8 @@ class AzureChatOpenAI(BaseChatModel):
         api_version: Azure OpenAI API version.
         temperature: sampling temperature.
         max_tokens: maximum number of tokens to generate.
+        timeout: request timeout in seconds (None = SDK default).
+        max_retries: number of retries on 429/5xx (SDK default = 2).
     """
 
     azure_deployment: str
@@ -47,6 +50,8 @@ class AzureChatOpenAI(BaseChatModel):
     api_version: str = "2024-05-01-preview"
     temperature: float = 0.0
     max_tokens: Optional[int] = None
+    timeout: Optional[float] = None
+    max_retries: int = 2
 
     @property
     def _llm_type(self) -> str:
@@ -57,6 +62,8 @@ class AzureChatOpenAI(BaseChatModel):
             azure_endpoint=self.azure_endpoint,
             api_key=self.api_key,
             api_version=self.api_version,
+            timeout=self.timeout,
+            max_retries=self.max_retries,
         )
 
     def _aclient(self) -> AsyncAzureOpenAI:
@@ -64,6 +71,8 @@ class AzureChatOpenAI(BaseChatModel):
             azure_endpoint=self.azure_endpoint,
             api_key=self.api_key,
             api_version=self.api_version,
+            timeout=self.timeout,
+            max_retries=self.max_retries,
         )
 
     def _generate(
@@ -105,3 +114,47 @@ class AzureChatOpenAI(BaseChatModel):
             generations=[ChatGeneration(message=AIMessage(content=content))],
             llm_output={"model": response.model},
         )
+
+    def _stream(
+        self,
+        messages: List[BaseMessage],
+        stop: Optional[List[str]] = None,
+        run_manager: Optional[CallbackManagerForLLMRun] = None,
+        **kwargs: Any,
+    ) -> Iterator[ChatGenerationChunk]:
+        stream = self._client().chat.completions.create(
+            model=self.azure_deployment,
+            messages=[_to_openai_message(m) for m in messages],
+            temperature=self.temperature,
+            max_tokens=self.max_tokens,
+            stop=stop,
+            stream=True,
+        )
+        for chunk in stream:
+            delta = chunk.choices[0].delta.content
+            if delta:
+                if run_manager:
+                    run_manager.on_llm_new_token(delta)
+                yield ChatGenerationChunk(message=AIMessageChunk(content=delta))
+
+    async def _astream(
+        self,
+        messages: List[BaseMessage],
+        stop: Optional[List[str]] = None,
+        run_manager: Optional[AsyncCallbackManagerForLLMRun] = None,
+        **kwargs: Any,
+    ) -> AsyncIterator[ChatGenerationChunk]:
+        stream = await self._aclient().chat.completions.create(
+            model=self.azure_deployment,
+            messages=[_to_openai_message(m) for m in messages],
+            temperature=self.temperature,
+            max_tokens=self.max_tokens,
+            stop=stop,
+            stream=True,
+        )
+        async for chunk in stream:
+            delta = chunk.choices[0].delta.content
+            if delta:
+                if run_manager:
+                    await run_manager.on_llm_new_token(delta)
+                yield ChatGenerationChunk(message=AIMessageChunk(content=delta))
