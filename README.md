@@ -6,7 +6,7 @@
 ## 安装
 
 ```bash
-pip install git+https://github.com/MessiRosie/azure-langchain.git
+pip install git+https://github.com/MessiRosie/langchain-openai.git
 ```
 
 或在项目根目录本地安装：
@@ -27,7 +27,7 @@ export AZURE_OPENAI_ENDPOINT="https://your-resource-name.openai.azure.com/"
 ## 使用 Azure OpenAI 聊天模型
 
 ```python
-from azure_langchain_agent import AzureChatOpenAI
+from langchain_openai import AzureChatOpenAI
 
 llm = AzureChatOpenAI(
     azure_deployment="your-deployment-name",
@@ -45,7 +45,7 @@ print(response.content)
 ## 使用向量嵌入
 
 ```python
-from azure_langchain_agent import AzureOpenAIEmbeddings
+from langchain_openai import AzureOpenAIEmbeddings
 
 embeddings = AzureOpenAIEmbeddings(
     azure_deployment="your-embedding-deployment",
@@ -59,7 +59,7 @@ query_vec = embeddings.embed_query("hello")
 ## 使用文本补全（Legacy）
 
 ```python
-from azure_langchain_agent import AzureOpenAI
+from langchain_openai import AzureOpenAI
 
 llm = AzureOpenAI(
     azure_deployment="your-deployment-name",
